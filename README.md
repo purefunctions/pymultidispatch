@@ -105,3 +105,8 @@ the function decorated using `@multimethod()` decorator and `<key>` is the key f
 handler.
 
 The `dispatch_key` is the result of calling `<dispatch_key_gen_fn>` of the `@multimethod` decorator
+
+Default params: Default params can be used, but only in the default handler (i.e. the function decorated with
+`@multimethod` decorator). The other registered handler uses the default params (if any) in the default handler that
+was decorated with `@multimethod` decorator. Any default params overwritten at the time of the call still takes
+precedence just like regular python functions do

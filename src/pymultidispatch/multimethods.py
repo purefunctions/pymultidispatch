@@ -1,5 +1,7 @@
 from collections.abc import Callable, Hashable
 from functools import partial, wraps
+import inspect
+from typing import NamedTuple, Mapping, Any
 
 __all__ = ["multimethod"]
 
@@ -97,7 +99,60 @@ The dispatched functions are defined on this multimethod using the <fn>.register
 the function decorated using @multimethod() decorator and <key> is the key for which we are registering <fn> as a
 handler. The <key> is generated 
 The dispatch_key is the result of calling <dispatch_key_gen_fn> of the @multimethod decorator
+
+Default params: Default params can be used, but only in the default handler (i.e. the function decorated with 
+@multimethod decorator). The other registered handler uses the default params (if any) in the default handler that
+was decorated with @multimethod decorator. Any default params overwritten at the time of the call still takes 
+precedence just like regular python functions do
 """
+
+
+def multimethod(key_fn):
+    key_fn_name = __fun_fqn(key_fn)
+
+    if not isinstance(key_fn, Callable):
+        raise TypeError(f"key_fn {key_fn_name} of type {type(key_fn)} must be Callable")
+
+    def decorator(default_handler):
+        default_handler_name = __fun_fqn(default_handler)
+        default_handler_info = __HandlerInfo(
+            handler=default_handler,
+            default_params=__get_default_params(default_handler)
+        )
+
+        registry: Mapping[Hashable, __HandlerInfo] = {}
+
+        def dispatch(key, *args, **kwargs):
+            handler_info = registry.get(key, default_handler_info)
+            return handler_info.handler(
+                *args,
+                **{**handler_info.default_params, **kwargs}  # call site default params takes precedence
+            )
+
+        @wraps(default_handler)
+        def wrapper(*args, **kwargs):
+            key = key_fn(*args, **{**kwargs, **default_handler_info.default_params})
+            if not isinstance(key, Hashable):
+                raise TypeError(
+                    f"Key generator function {key_fn_name} returned a key {repr(key)} that is not Hashable"
+                )
+            return dispatch(key, *args, **kwargs)
+
+        wrapper.register = partial(
+            __register,
+            default_handler_info=default_handler_info,
+            registry=registry,
+            registering_for_name=default_handler_name
+        )
+        wrapper.registered_keys = lambda: registry.keys()
+        return wrapper
+
+    return decorator
+
+
+class __HandlerInfo(NamedTuple):
+    handler: Callable
+    default_params: Mapping[str, Any]
 
 
 def __fun_fqn(fun):
@@ -106,7 +161,16 @@ def __fun_fqn(fun):
     return ".".join([val for val in [module, qualname] if val])
 
 
-def __register(key, registry=None, registering_for_name="", overwrite=False):
+def __get_default_params(fun):
+    sig = inspect.signature(fun)
+    return {
+        k: v.default
+        for k, v in sig.parameters.items()
+        if v.default is not inspect.Parameter.empty
+    }
+
+
+def __register(key, default_handler_info, registry=None, registering_for_name="", overwrite=False):
     """
     Internal decorator to register the non-default handlers for multimethod
     registry and key_fn_name are keyword arguments with defaults to make it easy to apply
@@ -120,48 +184,33 @@ def __register(key, registry=None, registering_for_name="", overwrite=False):
             raise TypeError(
                 f"Cannot register handler for function {registering_for_name} with key {repr(key)} that is not Hashable"
             )
+
+        if not isinstance(handler, Callable):
+            raise TypeError(f"handler function {handler} of type {type(handler)} must be Callable")
+
         if key in registry and not overwrite:
             raise KeyError(
                 f"Duplicate registration for key {repr(key)} for function {registering_for_name}"
             )
-        registry[key] = handler
+
+        if __get_default_params(handler):
+            raise ValueError(
+                f"Found default params for key {repr(key)} for function {registering_for_name}. "
+                "Default params are only allowed in the default handler"
+            )
+
+        registry[key] = __HandlerInfo(
+            handler=handler,
+            default_params={
+                **default_handler_info.default_params,
+                **__get_default_params(handler)  # default params of explicit registration takes precedence
+            }
+        )
 
         @wraps(handler)
         def wrapper(*args, **kwargs):
             handler(*args, **kwargs)
 
-        return wrapper
-
-    return decorator
-
-
-def multimethod(key_fn):
-    key_fn_name = __fun_fqn(key_fn)
-
-    if not isinstance(key_fn, Callable):
-        raise TypeError(f"key_fn {key_fn_name} of type {type(key_fn)} must be Callable")
-
-    def decorator(default_handler):
-        default_handler_name = __fun_fqn(default_handler)
-        registry = {}
-
-        def dispatch(key, *args, **kwargs):
-            handler = registry.get(key, default_handler)
-            return handler(*args, **kwargs)
-
-        @wraps(default_handler)
-        def wrapper(*args, **kwargs):
-            key = key_fn(*args, **kwargs)
-            if not isinstance(key, Hashable):
-                raise TypeError(
-                    f"Key generator function {key_fn_name} returned a key {repr(key)} that is not Hashable"
-                )
-            return dispatch(key, *args, **kwargs)
-
-        wrapper.register = partial(
-            __register, registry=registry, registering_for_name=default_handler_name
-        )
-        wrapper.registered_keys = lambda: registry.keys()
         return wrapper
 
     return decorator
