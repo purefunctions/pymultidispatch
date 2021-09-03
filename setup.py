@@ -5,7 +5,7 @@ with open("README.md", "r") as readme_file:
 
 setup(
     name="pymultidispatch",
-    version="1.1.0",
+    version="1.2.0",
     author="Siva Jayaraman",
     author_email="purefunctions.os@outlook.com",
     description="Multimethods implementation in Python",

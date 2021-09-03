@@ -170,7 +170,7 @@ def __get_default_params(fun):
     }
 
 
-def __register(key, default_handler_info, registry=None, registering_for_name="", overwrite=False):
+def __register(key, *additional_keys, default_handler_info, registry=None, registering_for_name="", overwrite=False):
     """
     Internal decorator to register the non-default handlers for multimethod
     registry and key_fn_name are keyword arguments with defaults to make it easy to apply
@@ -178,6 +178,8 @@ def __register(key, default_handler_info, registry=None, registering_for_name=""
     """
     if registry is None:
         registry = {}
+
+    all_keys = [key] + list(additional_keys)
 
     def decorator(handler):
         if not isinstance(key, Hashable):
@@ -188,24 +190,26 @@ def __register(key, default_handler_info, registry=None, registering_for_name=""
         if not isinstance(handler, Callable):
             raise TypeError(f"handler function {handler} of type {type(handler)} must be Callable")
 
-        if key in registry and not overwrite:
-            raise KeyError(
-                f"Duplicate registration for key {repr(key)} for function {registering_for_name}"
-            )
+        for _key in all_keys:
+            if _key in registry and not overwrite:
+                raise KeyError(
+                    f"Duplicate registration for key {repr(_key)} for function {registering_for_name}"
+                )
 
         if __get_default_params(handler):
             raise ValueError(
-                f"Found default params for key {repr(key)} for function {registering_for_name}. "
+                f"Found default params while registering keys {repr(all_keys)} for function {registering_for_name}. "
                 "Default params are only allowed in the default handler"
             )
 
-        registry[key] = __HandlerInfo(
-            handler=handler,
-            default_params={
-                **default_handler_info.default_params,
-                **__get_default_params(handler)  # default params of explicit registration takes precedence
-            }
-        )
+        for _key in all_keys:
+            registry[_key] = __HandlerInfo(
+                handler=handler,
+                default_params={
+                    **default_handler_info.default_params,
+                    **__get_default_params(handler)  # default params of explicit registration takes precedence
+                }
+            )
 
         @wraps(handler)
         def wrapper(*args, **kwargs):

@@ -192,3 +192,23 @@ def test_that_multimethod_registration_with_default_params_fails():
         @type_info.register(int)
         def _(x, y, z, zz=1):
             return x, int, y, z, zz
+
+
+def test_multimethod_registration_with_more_keys_passes():
+    @multimethod(key_fn=lambda x, y, z, zz: type(x))
+    def type_info(x, y="a", z="b", zz="c"):
+        return NotImplementedError
+
+    @type_info.register(int, float, str)
+    def _(x, y, z, zz):
+        return (int, float, str)
+
+    @type_info.register(bool)
+    def _(x, y, z, zz):
+        return x, bool, y, z, zz
+
+    assert type_info(1, z="2", y="3") == (int, float, str)
+    assert type_info(1.1, z="2", y="3") == (int, float, str)
+    assert type_info("1", z="2", y="3") == (int, float, str)
+    assert type_info(True, z="2", y="3") == (True, bool, "3", "2", "c")
+

@@ -86,6 +86,12 @@ def _(payload):  # Can be of any name, but leave out a name and use _ as convent
 def _(payload):
     # payload handler for init v4
     ...
+
+# We can also have more 'keys' passed into register to handle cases where the handler is the same
+@handle_message.register(("init", 5), ("init", 6))
+def _(payload):
+    # payload handler for init v5 and init v6
+    ...
 ```
 
 As can be seen from above, there is no need to change the dispatcher function or any other existing file
@@ -103,6 +109,12 @@ to this function is the same that is given to the dispatched functions.
 The dispatched functions are defined on this multimethod using the `<fn>.register(<key>)` decorator, where `<fn>` is
 the function decorated using `@multimethod()` decorator and `<key>` is the key for which we are registering `<fn>` as a
 handler.
+Note: Additional keys can also be passed onto to `<fn>.register()` function as follows:
+
+`<fn>.register(<key1>, <key2>, <key3>)`
+
+This will register the function for all the given keys and invoke the function when the `dispatch_key_gen_fn` returns
+ andy of the given keys
 
 The `dispatch_key` is the result of calling `<dispatch_key_gen_fn>` of the `@multimethod` decorator
 
